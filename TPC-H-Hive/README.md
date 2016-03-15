@@ -9,9 +9,7 @@ This REAME covers the following topics.
 ----
 
 1. How to generate and prepare the data
-For the DBGEN part, please refer to the README in dbgen folder.
-Please copy all the generated data files to the data fol
-der. Then "sh tpch_prepare_data.sh" to prepare the data in HDFS.
+For the DBGEN part, please refer to the README in dbgen folder.Please copy all the generated data files to the data folder. Then "sh tpch_prepare_data.sh" to prepare the data in HDFS.
  
 2. How to run the queries
 There are two scripts in the package, tpch& tpch_parquet. you can run the queries by "sh tpch_benchmark.sh $scripts_name".
