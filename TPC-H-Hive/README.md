@@ -2,9 +2,11 @@ TPC-H-Hive
 This tool is used to run tpc-h benchmark on hive with PARQUET format.
 
 This REAME covers the following topics.
+
 1. How to generate and prepare the data
 2. How to run the queries
 3. How to validate the results
+
 
 ----
 
