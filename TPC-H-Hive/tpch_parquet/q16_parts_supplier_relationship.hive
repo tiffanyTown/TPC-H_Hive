@@ -1,0 +1,74 @@
+DROP TABLE partsupp;
+DROP TABLE part;
+DROP TABLE supplier;
+DROP TABLE q16_parts_supplier_relationship_parquet;
+DROP TABLE q16_tmp_parquet;
+DROP TABLE supplier_tmp_parquet;
+
+-- create the tables and load the data
+create external table part_ext (P_PARTKEY INT, P_NAME STRING, P_MFGR STRING, P_BRAND STRING, P_TYPE STRING, P_SIZE INT, P_CONTAINER STRING, P_RETAILPRICE DOUBLE, P_COMMENT STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '|' STORED AS TEXTFILE LOCATION '/tpch/part';
+create external table partsupp_ext (PS_PARTKEY INT, PS_SUPPKEY INT, PS_AVAILQTY INT, PS_SUPPLYCOST DOUBLE, PS_COMMENT STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '|' STORED AS TEXTFILE LOCATION'/tpch/partsupp';
+create external table supplier_ext (S_SUPPKEY INT, S_NAME STRING, S_ADDRESS STRING, S_NATIONKEY INT, S_PHONE STRING, S_ACCTBAL DOUBLE, S_COMMENT STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '|' STORED AS TEXTFILE LOCATION '/tpch/supplier';
+
+CREATE TABLE part
+STORED AS PARQUET
+AS
+SELECT * FROM part_ext;
+
+DROP TABLE part_ext;
+
+CREATE TABLE partsupp
+STORED AS PARQUET
+AS
+SELECT * FROM partsupp_ext;
+
+DROP TABLE partsupp_ext;
+
+CREATE TABLE supplier
+STORED AS PARQUET
+AS
+SELECT * FROM supplier_ext;
+
+DROP TABLE supplier_ext;
+
+-- create the result table
+create table q16_parts_supplier_relationship_parquet(p_brand string, p_type string, p_size int, supplier_cnt int);
+create table q16_tmp_parquet(p_brand string, p_type string, p_size int, ps_suppkey int);
+create table supplier_tmp_parquet(s_suppkey int);
+
+-- the query
+insert overwrite table supplier_tmp_parquet
+select 
+  s_suppkey
+from 
+  supplier
+where 
+  not s_comment like '%Customer%Complaints%';
+
+insert overwrite table q16_tmp_parquet
+select 
+  p_brand, p_type, p_size, ps_suppkey
+from 
+  partsupp ps join part p 
+  on 
+    p.p_partkey = ps.ps_partkey and p.p_brand <> 'Brand#45' 
+    and not p.p_type like 'MEDIUM POLISHED%'
+  join supplier_tmp_parquet s 
+  on 
+    ps.ps_suppkey = s.s_suppkey;
+
+insert overwrite table q16_parts_supplier_relationship_parquet
+select 
+  p_brand, p_type, p_size, count(distinct ps_suppkey) as supplier_cnt
+from 
+  (select 
+     * 
+   from
+     q16_tmp_parquet 
+   where p_size = 49 or p_size = 14 or p_size = 23 or
+         p_size = 45 or p_size = 19 or p_size = 3 or
+         p_size = 36 or p_size = 9
+) q16_all
+group by p_brand, p_type, p_size
+order by supplier_cnt desc, p_brand, p_type, p_size;
+

@@ -1,0 +1,83 @@
+DROP TABLE customer;
+DROP TABLE orders;
+DROP TABLE q22_customer_tmp_parquet;
+DROP TABLE q22_customer_tmp1_parquet;
+DROP TABLE q22_orders_tmp_parquet;
+DROP TABLE q22_global_sales_opportunity_parquet;
+
+-- create tables and load data
+create external table customer_ext (C_CUSTKEY INT, C_NAME STRING, C_ADDRESS STRING, C_NATIONKEY INT, C_PHONE STRING, C_ACCTBAL DOUBLE, C_MKTSEGMENT STRING, C_COMMENT STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '|' STORED AS TEXTFILE LOCATION '/tpch/customer';
+create external table orders_ext (O_ORDERKEY INT, O_CUSTKEY INT, O_ORDERSTATUS STRING, O_TOTALPRICE DOUBLE, O_ORDERDATE STRING, O_ORDERPRIORITY STRING, O_CLERK STRING, O_SHIPPRIORITY INT, O_COMMENT STRING) ROW FORMAT DELIMITED FIELDS TERMINATED BY '|' STORED AS TEXTFILE LOCATION '/tpch/orders';
+CREATE TABLE customer
+STORED AS PARQUET
+AS
+SELECT * FROM customer_ext;
+
+DROP TABLE customer_ext;
+
+CREATE TABLE orders
+STORED AS PARQUET
+AS
+SELECT * FROM orders_ext;
+
+DROP TABLE orders_ext;
+
+-- create target tables
+create table q22_customer_tmp_parquet(c_acctbal double, c_custkey int, cntrycode string);
+create table q22_customer_tmp1_parquet(avg_acctbal double);
+create table q22_orders_tmp_parquet(o_custkey int);
+create table q22_global_sales_opportunity_parquet(cntrycode string, numcust int, totacctbal double);
+
+-- the query
+insert overwrite table q22_customer_tmp_parquet
+select 
+  c_acctbal, c_custkey, substr(c_phone, 1, 2) as cntrycode
+from 
+  customer
+where 
+  substr(c_phone, 1, 2) = '13' or
+  substr(c_phone, 1, 2) = '31' or
+  substr(c_phone, 1, 2) = '23' or
+  substr(c_phone, 1, 2) = '29' or
+  substr(c_phone, 1, 2) = '30' or
+  substr(c_phone, 1, 2) = '18' or
+  substr(c_phone, 1, 2) = '17';
+ 
+insert overwrite table q22_customer_tmp1_parquet
+select
+  avg(c_acctbal)
+from
+  q22_customer_tmp_parquet
+where
+  c_acctbal > 0.00;
+
+insert overwrite table q22_orders_tmp_parquet
+select 
+  o_custkey 
+from 
+  orders
+group by 
+  o_custkey;
+
+insert overwrite table q22_global_sales_opportunity_parquet
+select
+  cntrycode, count(1) as numcust, sum(c_acctbal) as totacctbal
+from
+(
+  select cntrycode, c_acctbal, avg_acctbal from
+  q22_customer_tmp1_parquet ct1 join
+  (
+    select cntrycode, c_acctbal from
+      q22_orders_tmp_parquet ot 
+      right outer join q22_customer_tmp_parquet ct 
+      on
+        ct.c_custkey = ot.o_custkey
+    where
+      o_custkey is null
+  ) ct2
+) a
+where
+  c_acctbal > avg_acctbal
+group by cntrycode
+order by cntrycode;
+
